@@ -1,0 +1,107 @@
+name: CI/CD
+
+on: [push, pull_request, workflow_dispatch]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+
+    strategy:
+      matrix:
+        component: [api, proxy, worker]
+      fail-fast: false  # Continue les autres jobs même si un échoue
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Métadonnées de l'image
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.component }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=sha,prefix=sha-
+            type=raw,value=latest
+
+      - name: Login GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & Push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./devops-simple/${{ matrix.component }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      # - name: Scan Trivy
+      #   uses: aquasecurity/trivy-action@master
+      #   continue-on-error: true
+      #   with:
+      #     image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.component }}:sha-${{ github.sha }}
+      #     format: sarif
+      #     output: trivy-${{ matrix.component }}.sarif
+      #     severity: CRITICAL,HIGH
+
+      - name: Upload résultats sécurité
+        uses: github/codeql-action/upload-sarif@v3
+        if: always() && hashFiles(format('trivy-{0}.sarif', matrix.component)) != ''
+        with:
+          sarif_file: trivy-${{ matrix.component }}.sarif
+
+      # - name: Générer SBOM
+      #   uses: anchore/sbom-action@v0
+      #   continue-on-error: true
+      #   with:
+      #     image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.component }}:sha-${{ github.sha }}
+      #     format: cyclonedx-json
+      #     output-file: sbom-${{ matrix.component }}.json
+
+      # - name: Sauvegarder SBOM
+      #   uses: actions/upload-artifact@v4
+      #   if: always() && hashFiles(format('sbom-{0}.json', matrix.component)) != ''
+      #   with:
+      #     name: sbom-${{ matrix.component }}
+      #     path: sbom-${{ matrix.component }}.json
+      #     retention-days: 90
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    defaults:
+      run:
+        working-directory: ./devops-simple
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Démarrer la stack
+        run: |
+          cp .env.example .env
+          docker compose up -d --build
+          sleep 20
+
+      - name: Tests d'intégration
+        run: python tests/integration_test.py
+
+      - name: Logs si échec
+        if: failure()
+        run: docker compose logs
+
+      - name: Arrêter la stack
+        if: always()
+        run: docker compose down -v

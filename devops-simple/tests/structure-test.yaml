@@ -1,0 +1,21 @@
+schemaVersion: '2.0.0'
+
+commandTests:
+  - name: "Utilisateur non-root"
+    command: "whoami"
+    expectedOutput: ["appuser"]
+
+  - name: "Flask installé"
+    command: "python"
+    args: ["-c", "import flask; print('ok')"]
+    expectedOutput: ["ok"]
+
+fileExistenceTests:
+  - name: "app.py présent"
+    path: "/app/app.py"
+    shouldExist: true
+
+metadataTest:
+  exposedPorts: ["5000"]
+  user: "appuser"
+  workdir: "/app"
