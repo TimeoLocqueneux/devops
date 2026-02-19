@@ -16,7 +16,7 @@ jobs:
 
     strategy:
       matrix:
-        component: [api, proxy, worker]
+        component: [api, proxy, worker, frontend]
       fail-fast: false  # Continue les autres jobs même si un échoue
 
     steps:
@@ -48,36 +48,6 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-      # - name: Scan Trivy
-      #   uses: aquasecurity/trivy-action@master
-      #   continue-on-error: true
-      #   with:
-      #     image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.component }}:sha-${{ github.sha }}
-      #     format: sarif
-      #     output: trivy-${{ matrix.component }}.sarif
-      #     severity: CRITICAL,HIGH
-
-      - name: Upload résultats sécurité
-        uses: github/codeql-action/upload-sarif@v3
-        if: always() && hashFiles(format('trivy-{0}.sarif', matrix.component)) != ''
-        with:
-          sarif_file: trivy-${{ matrix.component }}.sarif
-
-      # - name: Générer SBOM
-      #   uses: anchore/sbom-action@v0
-      #   continue-on-error: true
-      #   with:
-      #     image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.component }}:sha-${{ github.sha }}
-      #     format: cyclonedx-json
-      #     output-file: sbom-${{ matrix.component }}.json
-
-      # - name: Sauvegarder SBOM
-      #   uses: actions/upload-artifact@v4
-      #   if: always() && hashFiles(format('sbom-{0}.json', matrix.component)) != ''
-      #   with:
-      #     name: sbom-${{ matrix.component }}
-      #     path: sbom-${{ matrix.component }}.json
-      #     retention-days: 90
 
   integration-tests:
     runs-on: ubuntu-latest
