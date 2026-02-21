@@ -34,7 +34,7 @@ docker compose ps
 ```
 
 # L'application est disponible à cette adresse:
-https://localhost:8080
+http://localhost:8080
 # Tester les endpoints de l'API à ces adresses:
 http://localhost:8080/welcome
 http://localhost:8080/health
